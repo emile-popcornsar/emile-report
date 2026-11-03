@@ -61,7 +61,7 @@ description: Use when a multi-slice work bundle (several plans, often parallel s
 
 1. **근거 읽기**: 마스터플랜(목적/배경 · 슬라이스 목록 · 순서와 의존 · 진행 상황표), 있으면 설계 사양의 목표 · 비목표. 제품 화면 낱말(탭 이름 등)은 코드나 실제 화면에서 확인한다.
 2. **폴더 만들기**: `<덱 루트>/YYMMDD_<topic>/` (오늘 날짜 `date +%y%m%d`, topic은 묶음 이름 kebab-case). 스킬 디렉터리의 `deck-template/`(`index.html` · `deck.css` · `README.md` · `slides/s0-map.js`)을 복사한다.
-3. **`index.html` 채우기**: 맨 위 `DECK_CONFIG`(이름 · kicker · 부제 · 제품 · 예시 프로젝트 · 탭 줄 · 기본 탭)와 `<!-- 슬라이스 파일 목록 -->` 아래 `{{SLICE_SCRIPT_LINES}}`를 마스터플랜의 슬라이스 전부로 바꾼다 — 한 줄에 하나, `<script src="slides/sN-<topic>.js" onerror="DECK.missing.push('sN-<topic>.js')"></script>`. 없는 파일은 덱이 건너뛰므로 미착수 슬라이스도 지금 적는다. 제품이 PAVE가 아니면 "제품 전용 도우미" 절과 `deck.css` 3-b)를 그 제품 화면으로 다시 쓴다(쓰지 않으면 지운다).
+3. **`index.html` 채우기**: 맨 위 `DECK_CONFIG`(이름 · kicker · 부제 · 제품 · 예시 프로젝트 · 탭 줄 · 기본 탭)와 `<!-- 슬라이스 파일 목록 -->` 아래 `{{SLICE_SCRIPT_LINES}}`를 마스터플랜의 슬라이스 전부로 바꾼다 — 한 줄에 하나, `<script src="slides/sN-<topic>.js" onerror="DECK.missing.push('sN-<topic>.js')"></script>`. 없는 파일은 덱이 건너뛰므로 미착수 슬라이스도 지금 적는다. 제품의 화면이 템플릿의 본보기(문서 탭이 있는 앱)와 다르면 "제품 전용 도우미" 절과 `deck.css` 3-b)를 그 제품 화면으로 다시 쓴다(쓰지 않으면 지운다).
 4. **`slides/s0-map.js` 채우기**: `STATUS` 표에 슬라이스 전부(상태는 마스터플랜 진행 상황표 그대로, 증거 없는 "완료"는 쓰지 않는다), 한 장 요약(마스터플랜 목적/배경 · 비목표의 문장), 지도 표(`u.mapTable`, 행마다 id · 무엇 · 어디).
 5. **`README.md` 채우기**: 덱 이름 · 묶음 · 마스터플랜 경로 · 브랜치 · 세션 이름 · 슬라이스-파일-담당 표 · 예시 세트(프로젝트 이름, 사람 이름) · 제품 전용 도우미 표. 규약 본문은 그대로 둔다 — 그 README가 이 덱의 사실의 기준이 된다.
 6. **자리표시 0건 확인**: `grep -rn "{{" <덱 폴더>` 결과가 없어야 한다.
