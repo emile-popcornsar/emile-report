@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{DECK_NAME}}</title>
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+<header class="deck-bar">
+  <button type="button" id="tocBtn" aria-expanded="false">목차</button>
+  <span class="deck-name" id="deckName"></span>
+  <span class="spacer"></span>
+  <button type="button" id="prevBtn" aria-label="이전 슬라이드">이전</button>
+  <span id="counter"></span>
+  <button type="button" id="nextBtn" aria-label="다음 슬라이드">다음</button>
+  <button type="button" id="printBtn">Print</button>
+</header>
+<nav class="deck-toc" id="toc" hidden></nav>
+<main id="viewport"><div id="stage"></div></main>
+<div id="printRoot"></div>
+
+<script>
+/* ───────────────────────────────────────────────────────────────
+ * DECK_CONFIG — 이 덱에서 채우는 유일한 설정 덩이.
+ * NEW 모드는 이 덩이와 아래 "슬라이스 파일 목록"만 채운다. 그 밖의 엔진은 고치지 않는다.
+ * ─────────────────────────────────────────────────────────────── */
+var DECK_CONFIG = {
+  name: "{{DECK_NAME}}",                       // 위 막대와 창 제목. 예: "PAVE CTR 대응 개선"
+  kicker: "{{KICKER}}",                        // 표지 맨 위 작은 글. 예: "PAVE · A-SPICE 4.0 산출물 자동 생성"
+  title: "{{DECK_NAME}} — 무엇이 바뀌었나",     // 표지 제목
+  subtitle: "{{SUBTITLE}}",                    // 표지 부제 한 문장. 이 묶음이 무엇을 바꾸는지
+  product: "{{PRODUCT}}",                      // 화면 흉내 창의 제품 이름. 예: "PAVE"
+  project: "{{EXAMPLE_PROJECT}}",              // 화면 흉내 창의 예시 프로젝트 이름(합성). 예: "DoorLock"
+  tabs: [{{TABS}}],                            // 화면 흉내 창의 탭 줄, 앱의 실제 순서. 예: "Files", "Knowledge", "Workflow", "Documents", "Traceability"
+  defaultTab: "{{DEFAULT_TAB}}",               // u.win의 기본 탭
+  /* 릴리스에 이미 들어간 슬라이스(덱 차원의 사실이라 슬라이스 파일이 아니라 여기에 둔다).
+   * 기준: 그 릴리스가 잘린 main 커밋에 병합된 PR. 예: { "v0.1.3": ["s1", "s2"] }. 다음 릴리스는 줄을 하나 더한다. */
+  released: {}
+};
+
+/* ───────────────────────────────────────────────────────────────
+ * DECK — 슬라이스 파일이 부르는 등록 창구와 화면 흉내 도우미.
+ * 슬라이스 파일(slides/*.js)보다 먼저 정의되어야 한다.
+ * ─────────────────────────────────────────────────────────────── */
+window.DECK = (function () {
+  var cfg = DECK_CONFIG;
+  var slices = [];
+  var problems = [];
+  var missing = [];   // index.html이 가리키지만 아직 없는 슬라이스 파일 (정상: 그 슬라이스가 아직 끝나지 않음)
+
+  function releaseOf(id) { for (var v in cfg.released) if (cfg.released[v].indexOf(id) >= 0) return v; return ""; }
+
+  function add(s) {
+    var miss = ["id", "session", "title", "slides"].filter(function (k) { return !s || !s[k]; });
+    if (miss.length) { problems.push((s && s.id || "?") + ": 빠진 칸 " + miss.join(", ")); return; }
+    if (slices.some(function (x) { return x.id === s.id; })) { problems.push(s.id + ": 같은 id가 이미 등록됨"); return; }
+    slices.push(s);
+  }
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+  function cell(c) { return c && typeof c === "object" ? c : { html: c == null ? "" : String(c) }; }
+  var STATE = { "완료": "st-done", "진행 중": "st-wip", "미착수": "st-todo" };
+
+  /* ── 공용 도우미 (제품과 무관) — deck.css의 부품을 묶어 HTML 문자열을 만든다 ── */
+  var ui = {
+    /** HTML 이스케이프. 원문 글(마크다운 · 코드)을 그대로 보일 때 */
+    esc: esc,
+
+    /** 번호 핀. style을 주면 절대 위치("top:10px;left:20px") */
+    pin: function (n, style) {
+      return style ? '<span class="pin abs" style="' + style + '">' + n + "</span>" : '<span class="pin">' + n + "</span>";
+    },
+    /** 전 / 후 두 칸. o = { before: "부제", after: "부제", stack: true, cols: "2fr 3fr" } */
+    ba: function (beforeHtml, afterHtml, o) {
+      o = o || {};
+      return '<div class="ba' + (o.stack ? " stack" : "") + '"' + (o.cols && !o.stack ? ' style="grid-template-columns:' + o.cols + '"' : "") + ">" +
+        '<div class="ba-col ba-before"><div class="ba-label" data-l="전"><span>' + (o.before || "") + "</span></div>" + beforeHtml + "</div>" +
+        '<div class="ba-col ba-after"><div class="ba-label" data-l="후"><span>' + (o.after || "") + "</span></div>" + afterHtml + "</div></div>";
+    },
+    /** 핀 설명 목록. items = [[1, "설명"], ...], one = 한 열 */
+    caps: function (items, one) {
+      return '<ol class="caps' + (one ? " one" : "") + '">' + items.map(function (it) {
+        return "<li>" + ui.pin(it[0]) + "<span>" + it[1] + "</span></li>";
+      }).join("") + "</ol>";
+    },
+    /** 한 장 요약. o = { before: [문장], after: [문장], meta: [[키, 값]], not: "하지 않는 것" } */
+    summary: function (o) {
+      function ps(a) { return (a || []).map(function (t) { return "<p>" + t + "</p>"; }).join(""); }
+      return '<div class="sum-grid">' +
+        '<div class="sum-card sum-before"><h4>전에는</h4>' + ps(o.before) + "</div>" +
+        '<div class="sum-card sum-after"><h4>이제는</h4>' + ps(o.after) + "</div></div>" +
+        '<div class="sum-meta">' + (o.meta || []).map(function (kv) { return '<span class="kv"><b>' + kv[0] + "</b>" + kv[1] + "</span>"; }).join("") + "</div>" +
+        (o.not ? '<p class="sum-not">' + o.not + "</p>" : "");
+    },
+    /** 진행 상태 알약. state = "완료" | "진행 중" | "미착수" */
+    state: function (state) { return '<span class="st ' + (STATE[state] || "st-todo") + '">' + esc(state) + "</span>"; },
+    /** 체크 표시 */
+    check: function () { return '<span class="m-check"></span>'; },
+
+    /** 제품 창: 제목 막대 + 탭 줄(DECK_CONFIG.tabs) + 본문. o = { tab, project, h, body } */
+    win: function (o) {
+      o = o || {};
+      var tab = o.tab || cfg.defaultTab || cfg.tabs[0];
+      var tabs = cfg.tabs.map(function (t) { return '<span class="m-tab' + (t === tab ? " is-active" : "") + '">' + esc(t) + "</span>"; }).join("");
+      return '<div class="m-win" style="height:' + (o.h || 440) + 'px">' +
+        '<div class="m-titlebar"><span class="m-logo"></span><b>' + esc(cfg.product) + '</b><span class="m-proj">' + esc(o.project || cfg.project) + '</span><span class="m-ctl"><i></i><i></i></span></div>' +
+        (cfg.tabs.length ? '<div class="m-tabs">' + tabs + "</div>" : "") +
+        '<div class="m-body">' + (o.body || "") + "</div></div>";
+    },
+    /** 앱 밖 창(저장소 파일 · 문서 보기 · 터미널). o = { h, sub: 제목 옆 흐린 글 } */
+    frame: function (title, body, o) {
+      o = o || {};
+      return '<div class="m-win m-frame"' + (o.h ? ' style="height:' + o.h + 'px"' : "") + '>' +
+        '<div class="m-titlebar"><span class="m-fileicon"></span><b>' + esc(title) + "</b>" + (o.sub ? '<span class="m-proj">' + esc(o.sub) + "</span>" : "") + "</div>" +
+        '<div class="m-body">' + body + "</div></div>";
+    },
+    /** 원문 줄 보기(마크다운 · 코드). lines = [글 | [글, 표시, 줄번호]].
+     *  글은 문자열이면 자동 이스케이프, { html } 이면 그대로 넣는다(줄 안 일부 강조용).
+     *  표시 = "add"(초록, 앞에 +) | "del"(빨강, 앞에 -) | "hl"(파랑) | "warn"(노랑) | "dim"(흐림) | "".
+     *  o = { start: 첫 줄 번호(주면 차례로 센다), wrap: 긴 줄을 접는다, nonum: 줄 번호 칸 없음 } */
+    src: function (lines, o) {
+      o = o || {};
+      var n = o.start;
+      return '<div class="m-code' + (o.wrap ? " is-wrap" : "") + '">' + lines.map(function (l) {
+        if (!Array.isArray(l)) l = [l];
+        var num = l.length > 2 ? l[2] : (n === undefined ? "" : n++);
+        var t = l[0] && typeof l[0] === "object" ? l[0].html : esc(l[0] == null ? "" : l[0]);
+        var mark = l[1] === "add" ? "+" : l[1] === "del" ? "-" : "";
+        return '<div class="c-row' + (l[1] ? " c-" + l[1] : "") + '">' +
+          (o.nonum ? "" : '<span class="c-n">' + num + "</span>") +
+          '<span class="c-m">' + mark + '</span><span class="c-t">' + (t || " ") + "</span></div>";
+      }).join("") + "</div>";
+    },
+    /** 파일 트리. items = [[깊이, 이름, "dir"|"file", 오른쪽 메모(HTML), 표시 "hl"|"add"|"warn"|"dim"|""]] */
+    tree: function (items) {
+      return '<div class="m-tree">' + items.map(function (it) {
+        return '<div class="t-row' + (it[4] ? " t-" + it[4] : "") + '" style="padding-left:' + (6 + (it[0] || 0) * 12) + 'px">' +
+          '<span class="t-ic t-' + (it[2] || "file") + '"></span><span class="t-name">' + esc(it[1]) + "</span>" +
+          (it[3] ? '<span class="t-note">' + it[3] + "</span>" : "") + "</div>";
+      }).join("") + "</div>";
+    },
+    /** 파일 탭 모양: 왼쪽 파일 트리 + 오른쪽 파일 보기. o = { tree: u.tree(...), path, body, h, project, tab, treeW: 트리 폭 px(기본 190) } */
+    filesView: function (o) {
+      o = o || {};
+      return ui.win({
+        tab: o.tab || "Files", project: o.project, h: o.h,
+        body: '<div class="m-files"><div class="m-ftree"' + (o.treeW ? ' style="width:' + o.treeW + 'px"' : "") + '>' + (o.tree || "") + '</div><div class="m-fpane">' +
+          (o.path ? '<div class="m-fpath">' + esc(o.path) + "</div>" : "") + (o.body || "") + "</div></div>"
+      });
+    },
+    /** 그림 자리표시(무늬 상자). label = 짧은 글, o = { w, h } (px) */
+    img: function (label, o) {
+      o = o || {};
+      var st = (o.w ? "width:" + o.w + "px;" : "") + (o.h ? "height:" + o.h + "px;" : "");
+      return '<span class="m-img"' + (st ? ' style="' + st + '"' : "") + ">" + esc(label || "") + "</span>";
+    },
+    /** 슬라이드용 표(화면 흉내가 아닌 설명 표). head = [머리글], rows = [[칸 HTML]], o = { widths: ["120px", …], small } */
+    table: function (head, rows, o) {
+      o = o || {};
+      var w = o.widths || [];
+      return '<table class="s-table' + (o.small ? " is-small" : "") + '">' +
+        (w.length ? "<colgroup>" + w.map(function (x) { return '<col style="width:' + x + '">'; }).join("") + "</colgroup>" : "") +
+        "<tr>" + head.map(function (h) { return "<th>" + h + "</th>"; }).join("") + "</tr>" +
+        rows.map(function (r) { return "<tr>" + r.map(function (c) { return "<td>" + c + "</td>"; }).join("") + "</tr>"; }).join("") +
+        "</table>";
+    },
+    /** 숫자 타일. items = [[값, 이름, 보충(선택), 강조(선택 true)]], cols = 한 줄의 타일 수(선택, 기본은 폭에 맞춤) */
+    stats: function (items, cols) {
+      return '<div class="stats"' + (cols ? ' style="grid-template-columns:repeat(' + cols + ', 1fr)"' : "") + '>' + items.map(function (it) {
+        return '<div class="stat' + (it[3] ? " is-key" : "") + '"><b>' + it[0] + "</b><span>" + it[1] + "</span>" + (it[2] ? "<small>" + it[2] + "</small>" : "") + "</div>";
+      }).join("") + "</div>";
+    },
+    /** 갈래 지도. lanes = [{ label, sub, items: [{ id, title, state, date }] }] — 한 줄 안의 상자는 화살표로 잇는다 */
+    lanes: function (lanes) {
+      return '<div class="lanes">' + lanes.map(function (ln) {
+        return '<div class="lane"><div class="lane-label">' + esc(ln.label) + (ln.sub ? "<small>" + esc(ln.sub) + "</small>" : "") + "</div>" +
+          '<div class="lane-items">' + ln.items.map(function (b, i) {
+            var cls = b.state === "완료" ? " is-done" : b.state === "진행 중" ? " is-wip" : "";
+            return (i ? '<div class="flow-arrow"></div>' : "") +
+              '<div class="lane-box' + cls + '"><div class="lb-head"><span class="lb-id">' + esc(b.id) + "</span>" + ui.state(b.state) +
+              (b.date ? '<span class="lb-date">' + esc(b.date) + "</span>" : "") + "</div>" + esc(b.title) + "</div>";
+          }).join("") + "</div></div>";
+      }).join("") + "</div>";
+    },
+    /** 지도 표. rows = [[id, 무엇, 어디(선택)]] — 상태와 날짜는 DECK.sliceStatus에서 읽는다. 행마다 data-slice=id */
+    mapTable: function (rows) {
+      var st = DECK.sliceStatus || {};
+      return '<table class="s-table is-small map-table"><tr><th style="width:52px">슬라이스</th><th>무엇을 바꾸나</th><th style="width:150px">어디가 바뀌나</th><th style="width:88px">상태</th><th style="width:96px">병합일</th></tr>' +
+        rows.map(function (r) {
+          var s = st[String(r[0]).toUpperCase()] || { state: "미착수", date: "" };
+          return '<tr data-slice="' + esc(r[0]) + '"><td><b>' + esc(String(r[0]).toUpperCase()) + "</b></td><td>" + r[1] + "</td><td>" + (r[2] || "") + "</td><td>" + ui.state(s.state) + "</td><td>" + esc(s.date || "—") + "</td></tr>";
+        }).join("") + "</table>";
+    },
+    /** Word 표 흉내(검은 칸선). rows = [[칸]] — 칸은 HTML 문자열 또는 { html, rs, cs, head }. o = { head: 첫 행을 머리글로 (기본 true) } */
+    wtable: function (rows, o) {
+      o = o || {};
+      var headRow = o.head !== false;
+      return '<table class="w-table">' + rows.map(function (r, ri) {
+        return "<tr>" + r.map(function (c) {
+          c = cell(c);
+          var tag = (headRow && ri === 0) || c.head ? "th" : "td";
+          return "<" + tag + (c.rs ? ' rowspan="' + c.rs + '"' : "") + (c.cs ? ' colspan="' + c.cs + '"' : "") + ">" + c.html + "</" + tag + ">";
+        }).join("") + "</tr>";
+      }).join("") + "</table>";
+    },
+    /** Word 문서 안 그림 테두리(점선)와 이름표 */
+    wfig: function (label, inner) {
+      return '<span class="w-fig"><span class="w-figlabel">' + esc(label) + "</span>" + inner + "</span>";
+    },
+    /** Word 문서 창 흉내(앱 밖). o = { title, sub, h } — 본문은 흰 쪽 위에 놓인다 */
+    word: function (body, o) {
+      o = o || {};
+      return '<div class="m-word"' + (o.h ? ' style="height:' + o.h + 'px"' : "") + '>' +
+        '<div class="w-bar"><b>' + esc(o.title || "Word 문서") + "</b>" + (o.sub ? "<span>" + esc(o.sub) + "</span>" : "") + "</div>" +
+        '<div class="w-desk"><div class="w-page">' + body + "</div></div></div>";
+    },
+    /** 요구 목록 흉내. items = [[ID, 글(HTML), 표시 "add"|"chg"|""]] — add는 "신규", chg는 "개정" 꼬리표 */
+    reqList: function (items) {
+      return '<div class="m-req">' + items.map(function (it) {
+        var tag = it[2] === "add" ? "신규" : it[2] === "chg" ? "개정" : "";
+        return '<div class="r-row' + (it[2] ? " r-" + it[2] : "") + '"><span class="r-id">' + esc(it[0]) + '</span><span class="r-t">' + it[1] + "</span>" +
+          (tag ? '<span class="r-tag">' + tag + "</span>" : "") + "</div>";
+      }).join("") + "</div>";
+    }
+  };
+
+  /* ── 제품 전용 도우미 — 이 절은 제품의 실제 화면을 따라 바꿔 쓴다 ──
+   * 아래는 PAVE(Documents 탭 · 결재 배지 · 문서 목록)의 것이다. 다른 제품이면 이 절과 deck.css 3-b)를
+   * 그 제품의 화면 낱말로 다시 쓰고, 덱 README "제품 전용 도우미" 표를 맞춘다. 쓰지 않으면 지워도 된다. */
+  var SIDE = [
+    ["StRS", [cfg.project]], ["SyRS", [cfg.project]], ["SyAD", [cfg.project]],
+    ["SwRS", [cfg.project]], ["SwAD", [cfg.project]], ["SwDD", ["SWC_LockMgr", "SWC_DoorSense"]]
+  ];
+  var BADGE = { "AI-Generated": "b-ai", "In Review": "b-review", "Reviewed": "b-reviewed", "Approved": "b-approved" };
+
+  /** Documents 탭 도구 막대. o = { view: "Rendered"|"Split"|"Source", off: 비교 중처럼 보기 버튼을 흐리게 } */
+  ui.toolbar = function (o) {
+    o = o || {};
+    var view = o.view || "Rendered";
+    var seg = ["Rendered", "Split", "Source"].map(function (v) { return "<span" + (v === view ? ' class="is-on"' : "") + ">" + v + "</span>"; }).join("");
+    return '<div class="m-toolbar"><span class="m-iconbtn"></span><span class="m-doclink">DocSite</span>' +
+      '<span class="m-search">Search (/)</span>' +
+      '<span class="m-seg' + (o.off ? " is-off" : "") + '">' + seg + "</span>" +
+      '<span class="m-btn">Rebuild</span></div>';
+  };
+  /** 왼쪽 문서 목록. active = "SyRS" 같은 종류 이름 (SwDD는 "SwDD:SWC_LockMgr") */
+  ui.side = function (active) {
+    return '<div class="m-side">' + SIDE.map(function (g) {
+      return '<div class="m-side-group">' + g[0] + "</div>" + g[1].map(function (n) {
+        var on = active === g[0] || active === g[0] + ":" + n;
+        return '<div class="m-side-item' + (on ? " is-active" : "") + '">' + n + "</div>";
+      }).join("");
+    }).join("") + "</div>";
+  };
+  /** 문서 영역: 왼쪽 목록 + 본문. active가 null이면 목록을 접은 화면 */
+  ui.docs = function (active, pageHtml) {
+    return '<div class="m-docs">' + (active === null ? "" : ui.side(active)) + '<div class="m-page">' + pageHtml + "</div></div>";
+  };
+  /** 결재 상태 배지 */
+  ui.badge = function (status) { return '<span class="m-badge ' + (BADGE[status] || "b-ai") + '">' + status + "</span>"; };
+  /** 기준선 배지 */
+  ui.baseline = function (text) { return '<span class="m-badge b-baseline">' + text + "</span>"; };
+  /** 양식의 사람 칸 자리표시 */
+  ui.todo = function (what) { return '<span class="m-todo">TODO — human review: ' + what + "</span>"; };
+
+  return { add: add, ui: ui, slices: slices, problems: problems, missing: missing, releaseOf: releaseOf, config: cfg };
+})();
+</script>
+
+<!-- 슬라이스 파일 목록 — 묶음의 슬라이스 전부를 순서대로 미리 적어 둔다. 없는 파일은 건너뛴다(onerror).
+     NEW 모드가 마스터플랜의 슬라이스 목록으로 채우고, 그 뒤에는 새 슬라이스가 생길 때만 줄을 더한다. 세션은 자기 슬라이스 파일만 만든다. -->
+<script src="slides/s0-map.js" onerror="DECK.missing.push('s0-map.js')"></script>
+{{SLICE_SCRIPT_LINES}}
+
+<script>
+(function () {
+  var D = window.DECK;
+  var cfg = D.config;
+  var params = new URLSearchParams(location.search);
+
+  function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+  /** 슬라이스 표시 이름: 제목의 "S2b — …" 앞부분, 없으면 id를 대문자로 */
+  function sliceLabel(sl) { var m = /^(\S+)\s+—/.exec(sl.title); return m ? m[1] : sl.id.toUpperCase(); }
+  /** 슬라이스 상태: s0의 STATUS 표(DECK.sliceStatus)가 기준, 그 표에 없으면 등록의 status, 그것도 없으면 "완료" */
+  function statusOf(sl) {
+    var st = (D.sliceStatus || {})[String(sl.id).toUpperCase()];
+    return (st && st.state) || sl.status || "완료";
+  }
+  function statusBadge(sl) {
+    var s = statusOf(sl);
+    return '<span class="' + (s === "완료" ? "done-badge" : "wip-badge") + '">' + esc(s) + "</span>";
+  }
+  function releaseBadge(sl) { var v = D.releaseOf(sl.id); return v ? '<span class="rel-badge">' + esc(v) + " 포함</span>" : ""; }
+
+  document.title = cfg.name;
+  document.getElementById("deckName").textContent = cfg.name;
+
+  /* ── 슬라이드 목록 펼치기 ── */
+  var list = [{ cover: true, title: "표지" }];
+  D.slices.forEach(function (sl) {
+    sl.slides.forEach(function (s, i) { list.push({ slice: sl, slide: s, index: i, title: s.title }); });
+  });
+  var total = list.length;
+
+  function sessionsInOrder() {
+    var order = [], by = {};
+    D.slices.forEach(function (sl) {
+      if (!by[sl.session]) { by[sl.session] = []; order.push(sl.session); }
+      by[sl.session].push(sl);
+    });
+    order.sort();
+    return order.map(function (s) { return [s, by[s]]; });
+  }
+  function firstSlideOf(sl) {
+    for (var i = 0; i < list.length; i++) if (list[i].slice === sl) return i;
+    return 0;
+  }
+
+  /* ── 표지 ── */
+  function coverHtml() {
+    var dates = D.slices.map(function (s) { return s.date || ""; }).filter(Boolean).sort();
+    var latest = dates.length ? dates[dates.length - 1] : "—";
+    var sessions = sessionsInOrder();
+    var rows = sessions.map(function (pair) {
+      return '<div class="cover-sess"><h4>' + esc(pair[0]) + "</h4>" + pair[1].map(function (sl) {
+        return '<div class="cover-row"><span class="cover-id">' + esc(sliceLabel(sl)) + "</span>" +
+          '<span class="cover-t">' + esc(sl.title.replace(/^\S+\s+—\s+/, "")) + "</span>" +
+          statusBadge(sl) + releaseBadge(sl) +
+          '<span class="cover-m">' + esc(sl.pr ? "PR " + sl.pr : "PR 없음") + " · " + esc(sl.date || "—") + " · " + sl.slides.length + "장</span></div>";
+      }).join("") + "</div>";
+    }).join("");
+    var probs = D.problems.length ? '<p class="cover-prob">등록하지 못한 슬라이스: ' + esc(D.problems.join(" / ")) + "</p>" : "";
+    return '<section class="slide cover">' +
+      '<div class="cover-main">' +
+      '<div class="cover-kicker">' + esc(cfg.kicker) + "</div>" +
+      '<h1 class="cover-title">' + esc(cfg.title) + "</h1>" +
+      '<p class="cover-sub">' + esc(cfg.subtitle) + "</p>" +
+      '<p class="cover-date">기준일 ' + esc(latest) + ' <span>(등록된 슬라이스 중 가장 늦은 날짜)</span></p>' +
+      '<div class="cover-list" style="grid-template-columns:repeat(' + Math.max(1, Math.min(3, sessions.length)) + ', 1fr)">' + rows + "</div>" + probs + "</div>" +
+      '<footer class="slide-foot"><span>표지 · 슬라이스 ' + D.slices.length + "개 · 슬라이드 " + (total - 1) + '장</span><span class="grow"></span><span>1 / ' + total + "</span></footer></section>";
+  }
+
+  /* ── 슬라이스 슬라이드 ── */
+  function slideHtml(n) {
+    var e = list[n];
+    if (e.cover) return coverHtml();
+    var sl = e.slice;
+    var meta = [sliceLabel(sl), sl.session];
+    if (sl.pr) meta.push("PR " + sl.pr);
+    if (sl.req) meta.push(sl.req);
+    if (D.releaseOf(sl.id)) meta.push(D.releaseOf(sl.id) + " 포함");
+    return '<section class="slide" data-slice="' + esc(sl.id) + '">' +
+      '<header class="slide-head"><div class="slide-kicker"><span class="tag">' + esc(sl.title) + "</span>" +
+      (statusOf(sl) !== "완료" ? statusBadge(sl) : "") + "</div>" +
+      '<h2 class="slide-title">' + esc(e.slide.title) + "</h2></header>" +
+      '<div class="slide-body">' + e.slide.html + "</div>" +
+      '<footer class="slide-foot"><span>' + esc(meta.join(" · ")) + '</span><span class="grow"></span><span>' + (n + 1) + " / " + total + "</span></footer></section>";
+  }
+
+  /* ── 화면 보기: 한 장씩, 16:9 무대를 창에 맞춤 ── */
+  var stage = document.getElementById("stage");
+  var viewport = document.getElementById("viewport");
+  var counter = document.getElementById("counter");
+  var current = 0;
+
+  function fit() {
+    var vw = viewport.clientWidth, vh = viewport.clientHeight, pad = 24;
+    var s = Math.min((vw - pad) / 1280, (vh - pad) / 720);
+    stage.style.transform = "scale(" + s + ")";
+    stage.style.left = Math.max(0, (vw - 1280 * s) / 2) + "px";
+    stage.style.top = Math.max(0, (vh - 720 * s) / 2) + "px";
+  }
+  function show(n) {
+    current = Math.max(0, Math.min(total - 1, n));
+    stage.innerHTML = slideHtml(current);
+    counter.textContent = (current + 1) + " / " + total;
+    if (history.replaceState) history.replaceState(null, "", location.pathname + location.search + "#/" + (current + 1));
+    var links = document.querySelectorAll("#toc a[data-n]");
+    for (var i = 0; i < links.length; i++) links[i].classList.toggle("is-current", Number(links[i].getAttribute("data-n")) === current);
+  }
+
+  /* ── 목차: 세션 → 슬라이스 → 슬라이드 ── */
+  function buildToc() {
+    var html = '<a href="#/1" data-n="0">표지</a>';
+    sessionsInOrder().forEach(function (pair) {
+      html += "<h3>" + esc(pair[0]) + "</h3>";
+      pair[1].forEach(function (sl) {
+        var f = firstSlideOf(sl);
+        var rel = D.releaseOf(sl.id);
+        html += "<details" + (sl === (list[current] && list[current].slice) ? " open" : "") + "><summary>" + esc(sl.title) + " · " + esc(statusOf(sl)) + (rel ? " · " + esc(rel) + " 포함" : "") + '</summary><div class="toc-slides">' +
+          sl.slides.map(function (s, i) { return '<a href="#/' + (f + i + 1) + '" data-n="' + (f + i) + '">' + esc(s.title) + "</a>"; }).join("") + "</div></details>";
+      });
+    });
+    var toc = document.getElementById("toc");
+    toc.innerHTML = html;
+    toc.addEventListener("click", function (ev) {
+      var a = ev.target.closest("a[data-n]");
+      if (!a) return;
+      ev.preventDefault();
+      show(Number(a.getAttribute("data-n")));
+    });
+  }
+  function toggleToc(force) {
+    var toc = document.getElementById("toc"), btn = document.getElementById("tocBtn");
+    var open = typeof force === "boolean" ? force : toc.hidden;
+    toc.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  }
+
+  /* ── 인쇄: 모든 슬라이드를 세로로 ── */
+  function buildPrint() {
+    var root = document.getElementById("printRoot");
+    var html = "";
+    for (var i = 0; i < total; i++) html += slideHtml(i);
+    root.innerHTML = html;
+  }
+  function setPrintMode(on) { document.body.classList.toggle("print-mode", on); }
+
+  /* ── ?check: 무대 밖으로 넘친 것과 화면 흉내 안에서 잘린 것을 적는다 ── */
+  function check() {
+    var out = { overflow: [], clipped: [] };
+    var slides = document.querySelectorAll("#printRoot .slide");
+    for (var si = 0; si < slides.length; si++) {
+      var slide = slides[si];
+      var all = slide.querySelectorAll("*");
+      for (var k = 0; k < all.length; k++) {
+        var el = all[k];
+        var hasText = false;
+        for (var c = el.firstChild; c; c = c.nextSibling) if (c.nodeType === 3 && c.textContent.trim()) { hasText = true; break; }
+        if (!hasText && !el.classList.contains("pin")) continue;
+        var r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        var clip = null;
+        for (var p = el.parentElement; p && p !== slide; p = p.parentElement) {
+          var st = getComputedStyle(p);
+          if (st.overflow !== "visible" || st.overflowX !== "visible" || st.overflowY !== "visible") { clip = p; break; }
+        }
+        clip = clip || slide;
+        var cr = clip.getBoundingClientRect();
+        var over = r.right > cr.right + 1 || r.bottom > cr.bottom + 1 || r.left < cr.left - 1 || r.top < cr.top - 1;
+        if (!over) continue;
+        var stageLevel = clip === slide || clip.classList.contains("slide-body") || clip.classList.contains("slide-head");
+        var item = "slide " + (si + 1) + (slide.getAttribute("data-slice") ? " (" + slide.getAttribute("data-slice") + ")" : "") + " | " + (clip.className || clip.tagName) + " | " + el.textContent.trim().slice(0, 60);
+        (stageLevel ? out.overflow : out.clipped).push(item);
+      }
+      var tight = slide.querySelectorAll(".m-side-item, .d-txt");
+      for (var t = 0; t < tight.length; t++) if (tight[t].scrollWidth > tight[t].clientWidth + 1) out.clipped.push("slide " + (si + 1) + (slide.getAttribute("data-slice") ? " (" + slide.getAttribute("data-slice") + ")" : "") + " | ellipsis | " + tight[t].textContent.trim().slice(0, 60));
+    }
+    var order = [];
+    for (var oi = 0; oi < slides.length; oi++) order.push(slides[oi].getAttribute("data-slice") || "");
+    var pre = document.createElement("pre");
+    pre.id = "check-report";
+    pre.textContent = JSON.stringify({ slides: slides.length, slice_of_slide: order, problems: D.problems, missing: D.missing, overflow: out.overflow, clipped: out.clipped }, null, 1);
+    document.body.appendChild(pre);
+  }
+
+  /* ── 시작 ── */
+  buildToc();
+  buildPrint();
+  var m = /^#\/(\d+)$/.exec(location.hash);
+  show(m ? Number(m[1]) - 1 : 0);
+  fit();
+  window.addEventListener("resize", fit);
+  if (params.has("print") || params.has("check")) setPrintMode(true);
+  if (params.has("check")) check();
+
+  document.getElementById("prevBtn").addEventListener("click", function () { show(current - 1); });
+  document.getElementById("nextBtn").addEventListener("click", function () { show(current + 1); });
+  document.getElementById("tocBtn").addEventListener("click", function () { toggleToc(); });
+  document.getElementById("printBtn").addEventListener("click", function () { setPrintMode(true); setTimeout(function () { window.print(); }, 50); });
+  window.addEventListener("afterprint", function () { if (!params.has("print")) setPrintMode(false); });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.target && /input|textarea/i.test(ev.target.tagName)) return;
+    if (document.body.classList.contains("print-mode")) { if (ev.key === "Escape" && !params.has("print")) setPrintMode(false); return; }
+    var k = ev.key;
+    if (k === "ArrowRight" || k === "PageDown" || k === " ") { ev.preventDefault(); show(current + 1); }
+    else if (k === "ArrowLeft" || k === "PageUp") { ev.preventDefault(); show(current - 1); }
+    else if (k === "Home") { ev.preventDefault(); show(0); }
+    else if (k === "End") { ev.preventDefault(); show(total - 1); }
+    else if (k === "Escape") toggleToc(false);
+  });
+})();
+</script>
+</body>
+</html>
