@@ -72,7 +72,7 @@ description: Use when a multi-slice work bundle (several plans, often parallel s
 
 순서 고정. 그리기 전에 읽는다.
 
-1. **덱 README를 읽는다.** 그 덱의 등록 약속(`DECK.add` 또는 `PAVE_DECK.add`), 도우미 표, 예시 세트, 세션 이름, 파일 이름이 사실의 기준이다 — 이 스킬의 템플릿 · `slice-example.js`와 달라도 덱 README를 따른다. 이 스킬이 이름 짓는 도우미(`u.stats` · `u.table` · `u.filesView` …)가 그 덱에 없으면 자기 파일의 `<style>`(`sN-` 접두)과 HTML로 같은 모양을 그린다. 덱의 `index.html`에 도우미를 더하지 않는다.
+1. **덱 README를 읽는다.** 그 덱의 등록 약속(`DECK.add`, 템플릿 이전 덱이면 그 덱이 쓰는 전역 이름), 도우미 표, 예시 세트, 세션 이름, 파일 이름이 사실의 기준이다 — 이 스킬의 템플릿 · `slice-example.js`와 달라도 덱 README를 따른다. 이 스킬이 이름 짓는 도우미(`u.stats` · `u.table` · `u.filesView` …)가 그 덱에 없으면 자기 파일의 `<style>`(`sN-` 접두)과 HTML로 같은 모양을 그린다. 덱의 `index.html`에 도우미를 더하지 않는다.
 2. **근거를 모은다**: 슬라이스의 사양(장면 · 목표 · 비목표) · 계획(Task와 실행 기록의 수치) · 마스터플랜 행(PR · 해시 · 게이트 수치) · 바뀐 화면의 코드(UI 낱말, 버튼 이름, 칸 이름은 코드의 낱말 파일에서 옮긴다) · 있으면 승인된 시안(파일이면 읽고, claude.ai 아티팩트 링크면 Artifact 도구의 read로 읽는다 — 브라우저 확장은 쓰지 않는다) · E2E 단언. 읽은 경로를 전부 머리 주석에 적을 것이므로 목록으로 둔다. 게이트 수치가 여러 번 기록돼 있으면(계획 Task 기록과 병합 뒤 마스터플랜 행) **가장 늦은 기록**을 쓰고 어느 것인지 적는다.
 3. **슬라이드를 정한다** — 아래 "슬라이스 파일 계약"의 네 모양. 전 · 후 한 장은 필수. 슬라이스당 3 ~ 7장.
 4. **파일을 쓴다**: `slides/sN-<topic>.js`. 머리 주석 · 슬라이드 차례 · 핀과 설명의 모양은 스킬 디렉터리의 `slice-example.js`를 기준으로 한다(ADD · UPDATE 때만 읽는다). API 이름은 1의 덱 README를 따른다.
@@ -98,12 +98,12 @@ description: Use when a multi-slice work bundle (several plans, often parallel s
  * ⚠assumption 1: <설명용 값 · 줄인 창 폭 · 그리지 않은 부분>
  */
 (function () {
-  var u = DECK.ui;                              // 덱 README가 PAVE_DECK이면 그것
+  var u = DECK.ui;                              // 전역 이름은 덱 README를 따른다
   var slide1 = u.summary({ before: [...], after: [...], meta: [["PR", "#…"], ["요구사항", "…"]], not: "…" });
   var slide2 = u.ba(before2, after2, { before: "…", after: "…" }) + u.caps([[1, "…"], [2, "…"]]);
   DECK.add({
     id: "s7", session: "세션 2", title: "S7 — <슬라이스 제목>",
-    pr: "#276", date: "2026-10-20", req: "SR-…",
+    pr: "#276", date: "YYYY-MM-DD", req: "REQ-…",
     status: "완료",                           // s0 STATUS 표가 없는 덱에서만 읽힌다. "완료" | "진행 중"
     slides: [
       { title: "한 장 요약", html: slide1 },
@@ -164,4 +164,4 @@ node ~/.claude/skills/emile-report/scripts/check-deck.mjs <덱 폴더> --slice s
 
 - 이 스킬은 덱 파일만 만든다. 덱은 저장소 밖이라 git 작업이 없다. 마스터플랜 · 계획 · 메모리의 기록 줄은 그 문서의 규칙대로 더한다.
 - 템플릿(`deck-template/`)은 **NEW 때만**, `slice-example.js`는 **ADD · UPDATE 때만** 읽는다. `DESIGN-NOTES.md`는 스킬을 고칠 때만.
-- 기존 덱의 전역이 `PAVE_DECK`이면 그대로 쓴다. 덱을 템플릿으로 바꾸지 않는다.
+- 템플릿 이전에 손으로 만든 덱은 그 덱의 전역 이름 · 규약을 그대로 쓴다. 덱을 템플릿으로 바꾸지 않는다.

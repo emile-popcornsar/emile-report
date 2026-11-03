@@ -1,7 +1,7 @@
 /* S2 — 입력 폴더의 자료 종류 표시 (세션 1)
  * ※ emile-report 스킬의 예시 파일이다. 내용은 전부 지어낸 합성 예시이고, 실제 슬라이스 파일은 아래 머리 주석 칸을 실제 문서 경로로 채운다.
- * 근거: docs/superpowers/specs/2026-01-10-input-kind-design.md §2 목표 · §4.1 폴더 규칙 · §6 화면
- *       docs/superpowers/plans/2026-01-10-input-kind.md (Task 1~6, §9 실행 기록의 수치)
+ * 근거: docs/specs/2026-01-10-input-kind-design.md §2 목표 · §4.1 폴더 규칙 · §6 화면
+ *       docs/plans/2026-01-10-input-kind.md (Task 1~6, §9 실행 기록의 수치)
  *       docs/masterplans/20260105-0900-mixed-inputs-master-plan.md (S2 행)
  *       src/screens/FilesViewer.tsx (트리 오른쪽 메모의 영어 낱말: "converted" · "skipped")
  * 병합: PR #123 → main a1b2c3d4 (2026-01-14). 앱 확인 2026-01-14 완료.
@@ -21,7 +21,7 @@
       "파일 트리의 각 줄 오른쪽에 앱이 그 파일을 어떻게 다루는지(converted · skipped)가 붙는다.",
       "건너뛴 파일은 노란 줄로 표시되고, 이유가 마우스를 올리면 보인다."
     ],
-    meta: [["PR", "#123"], ["요구사항", "SR-ING-7"], ["병합", "2026-01-14"]],
+    meta: [["PR", "#123"], ["요구사항", "REQ-7"], ["병합", "2026-01-14"]],
     not: "하지 않는 것: 파일을 자동으로 옮기거나 지우지 않는다. 표시만 더한다."
   });
 
@@ -96,7 +96,7 @@
     title: "S2 — 입력 폴더의 자료 종류 표시",
     pr: "#123",
     date: "2026-01-14",
-    req: "SR-ING-7",
+    req: "REQ-7",
     slides: [
       { title: "한 장 요약", html: slide1 },
       { title: "무엇이 바뀌었나 — 파일 트리의 종류 표시", html: slide2 },

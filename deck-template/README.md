@@ -45,7 +45,7 @@
     title: "S7 — 요구 항목 속성 칸", // 필수. "S7 — " 앞부분이 바닥글 · 표지의 슬라이스 이름이 된다
     pr: "#276",                    // 선택. 없으면 "" (바닥글에서 빠진다)
     date: "2026-10-20",            // 선택. 병합일 또는 사양 승인일. 표지의 기준일은 가장 늦은 날짜
-    req: "SR-PIPE-71",             // 선택. 요구사항 ID
+    req: "REQ-71",                 // 선택. 요구사항 ID
     status: "진행 중",             // 선택. s0의 STATUS 표에 없는 슬라이스에만 쓰인다
     slides: [                      // 필수. 순서대로
       { title: "한 장 요약", html: u.summary({ /* … */ }) },
@@ -111,7 +111,7 @@
 
 ### 제품 전용 도우미 ({{PRODUCT}})
 
-{{PRODUCT_HELPERS: 제품 화면을 흉내 내는 도우미 표. 템플릿의 기본값은 PAVE Documents 탭 — u.toolbar · u.docs · u.side · u.badge · u.baseline · u.todo}}
+{{PRODUCT_HELPERS: 제품 화면을 흉내 내는 도우미 표. 템플릿의 기본값은 문서 탭이 있는 본보기 제품 — u.toolbar · u.docs · u.side · u.badge · u.baseline · u.todo}}
 
 ## `deck.css` 부품
 

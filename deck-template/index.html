@@ -26,11 +26,11 @@
  * NEW 모드는 이 덩이와 아래 "슬라이스 파일 목록"만 채운다. 그 밖의 엔진은 고치지 않는다.
  * ─────────────────────────────────────────────────────────────── */
 var DECK_CONFIG = {
-  name: "{{DECK_NAME}}",                       // 위 막대와 창 제목. 예: "PAVE CTR 대응 개선"
-  kicker: "{{KICKER}}",                        // 표지 맨 위 작은 글. 예: "PAVE · A-SPICE 4.0 산출물 자동 생성"
+  name: "{{DECK_NAME}}",                       // 위 막대와 창 제목. 예: "<제품> <묶음 이름>"
+  kicker: "{{KICKER}}",                        // 표지 맨 위 작은 글. 예: "<제품> · <제품을 한 구절로>"
   title: "{{DECK_NAME}} — 무엇이 바뀌었나",     // 표지 제목
   subtitle: "{{SUBTITLE}}",                    // 표지 부제 한 문장. 이 묶음이 무엇을 바꾸는지
-  product: "{{PRODUCT}}",                      // 화면 흉내 창의 제품 이름. 예: "PAVE"
+  product: "{{PRODUCT}}",                      // 화면 흉내 창의 제품 이름
   project: "{{EXAMPLE_PROJECT}}",              // 화면 흉내 창의 예시 프로젝트 이름(합성). 예: "DoorLock"
   tabs: [{{TABS}}],                            // 화면 흉내 창의 탭 줄, 앱의 실제 순서. 예: "Files", "Knowledge", "Workflow", "Documents", "Traceability"
   defaultTab: "{{DEFAULT_TAB}}",               // u.win의 기본 탭
@@ -226,11 +226,11 @@ window.DECK = (function () {
   };
 
   /* ── 제품 전용 도우미 — 이 절은 제품의 실제 화면을 따라 바꿔 쓴다 ──
-   * 아래는 PAVE(Documents 탭 · 결재 배지 · 문서 목록)의 것이다. 다른 제품이면 이 절과 deck.css 3-b)를
+   * 아래는 본보기 제품(문서 탭이 있는 앱: Documents 탭 · 결재 배지 · 문서 목록)의 것이다. 다른 제품이면 이 절과 deck.css 3-b)를
    * 그 제품의 화면 낱말로 다시 쓰고, 덱 README "제품 전용 도우미" 표를 맞춘다. 쓰지 않으면 지워도 된다. */
   var SIDE = [
-    ["StRS", [cfg.project]], ["SyRS", [cfg.project]], ["SyAD", [cfg.project]],
-    ["SwRS", [cfg.project]], ["SwAD", [cfg.project]], ["SwDD", ["SWC_LockMgr", "SWC_DoorSense"]]
+    ["Requirements", [cfg.project]], ["Architecture", [cfg.project]],
+    ["Design", ["Module_A", "Module_B"]]
   ];
   var BADGE = { "AI-Generated": "b-ai", "In Review": "b-review", "Reviewed": "b-reviewed", "Approved": "b-approved" };
 
@@ -244,7 +244,7 @@ window.DECK = (function () {
       '<span class="m-seg' + (o.off ? " is-off" : "") + '">' + seg + "</span>" +
       '<span class="m-btn">Rebuild</span></div>';
   };
-  /** 왼쪽 문서 목록. active = "SyRS" 같은 종류 이름 (SwDD는 "SwDD:SWC_LockMgr") */
+  /** 왼쪽 문서 목록. active = "Requirements" 같은 종류 이름 (문서가 여럿인 종류는 "Design:Module_A") */
   ui.side = function (active) {
     return '<div class="m-side">' + SIDE.map(function (g) {
       return '<div class="m-side-group">' + g[0] + "</div>" + g[1].map(function (n) {

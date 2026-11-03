@@ -3,16 +3,16 @@
  * 1) 덱 틀 (deck-*, stage, slide, cover)
  * 2) 슬라이드 글 (s-*, sum-*, flow-*, note, s-table, stats, lanes)
  * 3-a) 화면 흉내 공용 부품 (m-win, m-frame, m-code, m-tree, m-files, m-img, m-word, w-table, m-req)
- * 3-b) 제품 전용 화면 흉내 부품 — 아래는 PAVE(Documents 탭 · 결재 줄 · 배지)의 것. 다른 제품이면 이 절을 그 제품에 맞게 바꾼다
+ * 3-b) 제품 전용 화면 흉내 부품 — 아래는 본보기 제품(문서 탭이 있는 앱: Documents 탭 · 결재 줄 · 배지)의 것. 다른 제품이면 이 절을 그 제품에 맞게 바꾼다
  * 4) 콜아웃 핀 · 전/후 배치 (pin, caps, ba)
  * 5) 인쇄
  *
- * 색은 :root 토큰 한 곳에서 정한다(지금 값은 PAVE src/index.css 라이트 테마). 제품이 다르면 토큰만 바꾼다.
+ * 색은 :root 토큰 한 곳에서 정한다(지금 값은 본보기 제품의 라이트 테마). 제품의 실제 테마 값으로 토큰만 바꾼다.
  * 외부 글꼴 · 스크립트 없음. 시스템 글꼴만 쓴다.
  */
 
 :root {
-  /* 제품의 라이트 테마 토큰 (지금 값: PAVE src/index.css :root) */
+  /* 제품의 라이트 테마 토큰 (제품 CSS의 :root 값을 그대로 옮긴다) */
   --background: #FFFFFF;
   --foreground: #1A1B1C;
   --card: #F4F5F7;
@@ -205,7 +205,7 @@ body {
 .m-tab.is-active { color: var(--foreground); font-weight: 700; border-bottom-color: var(--primary); }
 .m-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
 
-/* ───────────── 3-b) 제품 전용 부품 (PAVE Documents 탭) — 다른 제품이면 이 절을 바꾼다 ───────────── */
+/* ───────────── 3-b) 제품 전용 부품 (본보기: 문서 탭이 있는 앱) — 다른 제품이면 이 절을 바꾼다 ───────────── */
 
 /* Documents 탭 도구 막대 */
 .m-toolbar {
@@ -257,7 +257,7 @@ body {
 /* 체크 표시 */
 .m-check { display: inline-block; width: 9px; height: 5px; border-left: 2px solid var(--success-icon); border-bottom: 2px solid var(--success-icon); transform: rotate(-45deg) translate(1px, -1px); margin-right: 2px; }
 
-/* Documents 탭 문서 영역 (DocSite: 왼쪽 문서 목록 + 본문) */
+/* Documents 탭 문서 영역 (왼쪽 문서 목록 + 본문) */
 .m-docs { flex: 1; min-height: 0; display: flex; background: var(--background); }
 .m-side { flex: none; width: 104px; padding: 6px 0; background: var(--sidebar); border-right: 1px solid var(--sidebar-border); overflow: hidden; font-size: 10.5px; }
 .m-side-group { padding: 5px 9px 2px; font-weight: 700; color: var(--muted-foreground); font-size: 9.5px; letter-spacing: 0.03em; }
